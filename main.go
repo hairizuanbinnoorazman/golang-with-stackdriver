@@ -34,6 +34,9 @@ func (h exampleJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Logger.Info("Start example serve")
 	defer h.Logger.Info("End example serve")
 	userData := user{Name: "ann", Gender: "female"}
+	tempValueAlloc := 12
+	h.Logger.Warnf("%v", tempValueAlloc)
+	h.Logger.Warnf("%+v", userData)
 	encoder := json.NewEncoder(w)
 	encoder.Encode(userData)
 }
