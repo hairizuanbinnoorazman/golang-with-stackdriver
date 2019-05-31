@@ -6,3 +6,6 @@ sample:
 	curl localhost:8888
 debug-context:
 	gcloud debug source gen-repo-info-file --output-directory .
+start:
+	go build -o local-app .
+	./local-app
