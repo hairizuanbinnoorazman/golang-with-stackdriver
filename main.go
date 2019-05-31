@@ -2,31 +2,56 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"runtime/debug"
 
 	"cloud.google.com/go/profiler"
-	"contrib.go.opencensus.io/exporter/stackdriver"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/plugin/ochttp"
-	"go.opencensus.io/trace"
 )
 
-type user struct {
-	Name   string `json:"name"`
-	Gender string `json:"gender"`
-}
+const ServiceName = "external-service"
+const ServiceHost = "0.0.0.0"
+const ServicePort = 8888
+const ServiceVersion = "v0.0.1"
 
-type exampleJSONHandler struct {
+type errResponse struct {
+	Error string `json:"error"`
+}
+type indexHandler struct {
 	Logger *logrus.Logger
 }
 
-func (h exampleJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	h.Logger.Info("Start example serve")
-	defer h.Logger.Info("End example serve")
-	userData := user{Name: "ann", Gender: "female"}
-	encoder := json.NewEncoder(w)
-	encoder.Encode(userData)
+func (h indexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.Logger.Info("Start Index Handler")
+	defer h.Logger.Info("End Index handler")
+	type respIndexHandler struct {
+		Status string `json:"status"`
+	}
+	resp := respIndexHandler{Status: "Ok"}
+	respOutput, _ := json.Marshal(resp)
+	w.Write(respOutput)
+}
+
+type logTestHandler struct {
+	Logger   *logrus.Logger
+	Severity string
+}
+
+func (h logTestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.Logger.Info("Start Log Test Handler")
+	defer h.Logger.Info("End Log Test handler")
+	switch h.Severity {
+	case "info":
+		h.Logger.Info("Info log from Log Test Handler")
+	case "warning":
+		h.Logger.Warning("Warning log from Log Test Handler")
+	case "error":
+		h.Logger.Error("Error log from Log Test Handler")
+	case "stack":
+		h.Logger.Error("Error log from Log Test Handler")
+		h.Logger.Error(string(debug.Stack()))
+	}
 }
 
 func main() {
@@ -41,23 +66,19 @@ func main() {
 
 	// Profiler initialization, best done as early as possible.
 	if err := profiler.Start(profiler.Config{
-		Service:        "myservice",
-		ServiceVersion: "1.0.0",
+		Service:        ServiceName,
+		ServiceVersion: ServiceVersion,
 	}); err != nil {
 		// TODO: Handle error.
-		logger.Error("Unable to load profiler")
+		logger.Errorf("Unable to load profiler %v", err)
 		logger.Error(string(debug.Stack()))
 	}
-
-	// Create and register a OpenCensus Stackdriver Trace exporter.
-	exporter, err := stackdriver.NewExporter(stackdriver.Options{})
-	if err != nil {
-		logger.Error(err)
-		logger.Error(string(debug.Stack()))
-	}
-	trace.RegisterExporter(exporter)
 
 	logger.Info("Application Start Up")
-	http.Handle("/", exampleJSONHandler{Logger: logger})
-	logger.Fatal(http.ListenAndServe("127.0.0.1:8888", &ochttp.Handler{}))
+	http.Handle("/", indexHandler{Logger: logger})
+	http.Handle("/info", logTestHandler{Logger: logger, Severity: "info"})
+	http.Handle("/warning", logTestHandler{Logger: logger, Severity: "warning"})
+	http.Handle("/error", logTestHandler{Logger: logger, Severity: "error"})
+	http.Handle("/stack", logTestHandler{Logger: logger, Severity: "stack"})
+	logger.Fatal(http.ListenAndServe(fmt.Sprintf("%v:%v", ServiceHost, ServicePort), nil))
 }
